@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useApp } from '@/lib/store/app-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import {
   Table,
   TableBody,
@@ -20,6 +22,21 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   AlertTriangle,
   TrendingUp,
   TrendingDown,
@@ -28,6 +45,7 @@ import {
   BarChart3,
   Info,
   Gavel,
+  Plus,
 } from 'lucide-react'
 
 // Correct formula per business rules: Ranking Score = (voteCount / readerCount) × 100%
@@ -78,6 +96,17 @@ function getRankBadge(position: number, total: number) {
 export function RankingLeaderboard() {
   const { state, dispatch } = useApp()
   const autoTriggerRef = useRef(false)
+  
+  // State for ranking data entry form
+  const [showDataEntryDialog, setShowDataEntryDialog] = useState(false)
+  const [selectedSeriesId, setSelectedSeriesId] = useState<string>('')
+  const [readerCountInput, setReaderCountInput] = useState('')
+  const [voteCountInput, setVoteCountInput] = useState('')
+  const [votePeriod, setVotePeriod] = useState('')
+  const [dataEntryError, setDataEntryError] = useState<string | null>(null)
+  
+  // Check if current user is Board Member (BR-RNK-02: Only Board Member role can access this form)
+  const isBoardMember = state.currentUser.role === 'board' || state.currentUser.isBoardMember
   
   const canTriggerReview = state.currentUser.role === 'board' || state.currentUser.role === 'editor'
   
@@ -181,6 +210,74 @@ export function RankingLeaderboard() {
     dispatch({ type: 'SET_ROUTE', payload: `decisions/${newSession.id}` })
   }
   
+  // Get current vote period
+  const getCurrentVotePeriod = () => {
+    const now = new Date()
+    const year = now.getFullYear()
+    const week = Math.ceil((now.getDate() + 6 - now.getDay()) / 7)
+    return `${year}-W${week.toString().padStart(2, '0')}`
+  }
+  
+  // Handle ranking data entry form submission
+  const handleDataEntrySubmit = () => {
+    setDataEntryError(null)
+    
+    const readerCount = parseInt(readerCountInput, 10)
+    const voteCount = parseInt(voteCountInput, 10)
+    
+    // BR-RNK-05: Reader Count must be > 0
+    if (isNaN(readerCount) || readerCount <= 0) {
+      setDataEntryError('Reader count must be greater than 0 (BR-RNK-05)')
+      return
+    }
+    
+    // BR-RNK-04: Vote Count cannot be negative
+    if (isNaN(voteCount) || voteCount < 0) {
+      setDataEntryError('Vote count cannot be negative (BR-RNK-04)')
+      return
+    }
+    
+    // BR-RNK-03: Vote Count cannot exceed Reader Count
+    if (voteCount > readerCount) {
+      setDataEntryError('Vote count cannot exceed reader count (BR-RNK-03)')
+      return
+    }
+    
+    // BR-RNK-06: Cannot submit duplicate entry for same series in same period
+    const existingEntry = state.rankings.find(
+      r => r.seriesId === selectedSeriesId && r.votePeriod === votePeriod
+    )
+    if (existingEntry) {
+      setDataEntryError('Duplicate entry for same series in same period not allowed (BR-RNK-06)')
+      return
+    }
+    
+    // Calculate new score
+    const newScore = Math.round((voteCount / readerCount) * 100 * 100) / 100
+    
+    // Create new ranking entry
+    const newRanking = {
+      id: `rank-${Date.now()}`,
+      seriesId: selectedSeriesId,
+      votePeriod: votePeriod,
+      readerCount: readerCount,
+      voteCount: voteCount,
+      score: newScore,
+      position: 0, // Will be recalculated
+      trend: 'same' as const,
+      flagged: newScore < 20, // Flag if below 20%
+    }
+    
+    dispatch({ type: 'ADD_RANKING', payload: newRanking })
+    
+    // Reset form
+    setShowDataEntryDialog(false)
+    setSelectedSeriesId('')
+    setReaderCountInput('')
+    setVoteCountInput('')
+    setVotePeriod('')
+  }
+  
   // Calculate average vote rate
   const avgVoteRate = rankedWithPositions.length > 0
     ? Math.round(rankedWithPositions.reduce((acc, s) => acc + s.voteRate, 0) / rankedWithPositions.length * 100) / 100
@@ -198,24 +295,36 @@ export function RankingLeaderboard() {
             Rankings based on Vote Rate formula: (Total Votes / Reader Count) x 100%
           </p>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Info className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs">
-              <p className="font-semibold mb-1">Vote Rate Formula</p>
-              <p className="text-xs mb-2">
-                Vote Rate = (Total Votes / Reader Count) x 100%
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Series in bottom 20% are flagged for review
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="flex items-center gap-2">
+          {/* BR-RNK-02: Enter Vote Data button visible only to Board Member role */}
+          {isBoardMember && (
+            <Button onClick={() => {
+              setVotePeriod(getCurrentVotePeriod())
+              setShowDataEntryDialog(true)
+            }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Enter Vote Data
+            </Button>
+          )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Info className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p className="font-semibold mb-1">Vote Rate Formula</p>
+                <p className="text-xs mb-2">
+                  Vote Rate = (Total Votes / Reader Count) x 100%
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Series in bottom 20% are flagged for review
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
       
       <div className="grid gap-4 md:grid-cols-3">
@@ -282,7 +391,7 @@ export function RankingLeaderboard() {
                 <TableHead className="text-center">Trend</TableHead>
                 <TableHead className="text-right">Vote Rate (%)</TableHead>
                 <TableHead className="text-right">Total Votes</TableHead>
-                <TableHead className="text-center">Rank Position</TableHead>
+                <TableHead className="text-center">Reader Count</TableHead>
                 <TableHead className="w-24"></TableHead>
               </TableRow>
             </TableHeader>
@@ -324,8 +433,8 @@ export function RankingLeaderboard() {
                       {item.voteCount.toLocaleString()}
                     </TableCell>
                     <TableCell className="text-center">
-                      <span className={`font-semibold ${isAtRisk ? 'text-destructive' : ''}`}>
-                        #{item.calculatedPosition}
+                      <span className="font-medium">
+                        {item.readerCount.toLocaleString()}
                       </span>
                     </TableCell>
                     <TableCell>
@@ -358,6 +467,104 @@ export function RankingLeaderboard() {
           </Table>
         </CardContent>
       </Card>
+      
+      {/* Ranking Data Entry Dialog - BR-RNK-02: Only Board Member role can access */}
+      <Dialog open={showDataEntryDialog} onOpenChange={(open) => {
+        setShowDataEntryDialog(open)
+        if (!open) {
+          setDataEntryError(null)
+          setSelectedSeriesId('')
+          setReaderCountInput('')
+          setVoteCountInput('')
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enter Vote Data</DialogTitle>
+            <DialogDescription>
+              Enter reader count and vote count for a series in the current voting period.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="series">Series *</Label>
+              <Select value={selectedSeriesId} onValueChange={setSelectedSeriesId}>
+                <SelectTrigger id="series">
+                  <SelectValue placeholder="Select a series" />
+                </SelectTrigger>
+                <SelectContent>
+                  {state.series.filter(s => s.status === 'active').map(series => (
+                    <SelectItem key={series.id} value={series.id}>
+                      {series.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="vote-period">Vote Period</Label>
+              <Input 
+                id="vote-period" 
+                value={votePeriod} 
+                onChange={(e) => setVotePeriod(e.target.value)}
+                placeholder="e.g., 2024-W48"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="reader-count">Reader Count *</Label>
+              <Input 
+                id="reader-count" 
+                type="number"
+                min="1"
+                value={readerCountInput} 
+                onChange={(e) => {
+                  setReaderCountInput(e.target.value)
+                  setDataEntryError(null)
+                }}
+                placeholder="Enter reader count (must be > 0)"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="vote-count">Vote Count *</Label>
+              <Input 
+                id="vote-count" 
+                type="number"
+                min="0"
+                value={voteCountInput} 
+                onChange={(e) => {
+                  setVoteCountInput(e.target.value)
+                  setDataEntryError(null)
+                }}
+                placeholder="Enter vote count (must be >= 0)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Vote count must be less than or equal to reader count
+              </p>
+            </div>
+            
+            {dataEntryError && (
+              <div className="flex items-center gap-2 text-destructive text-sm p-3 bg-destructive/10 rounded-md">
+                <AlertTriangle className="h-4 w-4" />
+                {dataEntryError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDataEntryDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleDataEntrySubmit}
+              disabled={!selectedSeriesId || !readerCountInput || !voteCountInput || !votePeriod}
+            >
+              Submit Data
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

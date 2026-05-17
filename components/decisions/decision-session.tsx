@@ -94,8 +94,8 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
   // Calculate vote rate from ranking data
   const voteRate = ranking ? calculateVoteRate(ranking.voteCount, ranking.readerCount) : 0
   
-  // Check if current user is Board Member
-  const isBoardMember = state.currentUser.role === 'board'
+  // Check if current user is Board Member (including dual role users)
+  const isBoardMember = state.currentUser.role === 'board' || state.currentUser.isBoardMember
   
   // Check if current user is Tantou Editor of this series (conflict of interest)
   const isTantouEditor = series?.editorId === state.currentUser.id
@@ -144,7 +144,7 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
     }
     
     if (selectedDecision === 'cancel' && !cancelReason.trim()) {
-      setValidationError('Cancel decision requires a written reason')
+      setValidationError('Reason is required (BR-DEC-05)')
       return
     }
     
@@ -348,7 +348,7 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
           </div>
           {ranking && (
             <div className="mt-4 pt-4 border-t">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div>
                   <Label className="text-muted-foreground">Total Votes</Label>
                   <p className="font-medium">{ranking.voteCount.toLocaleString()}</p>
@@ -357,13 +357,17 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
                   <Label className="text-muted-foreground">Reader Count</Label>
                   <p className="font-medium">{ranking.readerCount.toLocaleString()}</p>
                 </div>
+                <div>
+                  <Label className="text-muted-foreground">Rank Position</Label>
+                  <p className="font-medium">#{ranking.position}</p>
+                </div>
               </div>
             </div>
           )}
         </CardContent>
       </Card>
       
-      {/* Conflict of Interest Warning */}
+      {/* Conflict of Interest Warning - BR-DEC-02 */}
       {isTantouEditor && (
         <Card className="border-amber-500 bg-amber-500/10">
           <CardContent className="flex items-center gap-3 py-4">
@@ -371,7 +375,7 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
             <div>
               <p className="font-medium text-amber-700">Conflict of Interest</p>
               <p className="text-sm text-muted-foreground">
-                You are the Tantou Editor of this series and cannot vote on this decision.
+                You cannot vote due to conflict of interest (BR-DEC-02)
               </p>
             </div>
           </CardContent>

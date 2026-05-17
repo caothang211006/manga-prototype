@@ -122,7 +122,8 @@ export function DecisionList() {
     dispatch({ type: 'SET_ROUTE', payload: `decisions/${sessionId}` })
   }
   
-  const isBoardMember = state.currentUser.role === 'board'
+  // Check if current user is Board Member (including dual role users)
+  const isBoardMember = state.currentUser.role === 'board' || state.currentUser.isBoardMember
   
   // Active Sessions Table
   const renderActiveSessionTable = (sessions: DecisionSession[]) => {
@@ -206,10 +207,10 @@ export function DecisionList() {
                             : 'View'}
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        {hasConflict
-                          ? 'You cannot vote due to conflict of interest'
-                          : hasVoted
+                        <TooltipContent>
+                          {hasConflict
+                            ? 'You cannot vote due to conflict of interest (BR-DEC-02)'
+                            : hasVoted
                             ? 'You have already voted'
                             : session.status !== 'open'
                               ? 'Session is closed'

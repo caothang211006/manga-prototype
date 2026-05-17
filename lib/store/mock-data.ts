@@ -54,7 +54,7 @@ export const mockProposals: Proposal[] = [
     mangakaId: 'user-1',
     createdAt: daysAgo(14),
     submittedAt: daysAgo(7),
-    votingDeadline: daysFromNow(7),
+    votingDeadline: daysFromNow(3), // Testing mode: 3 days (production: 7 days)
     votes: [
       { id: 'vote-1', proposalId: 'proposal-1', boardMemberId: 'user-5', vote: 'approve', comment: 'Strong premise and art style.', votedAt: daysAgo(3) },
       { id: 'vote-2', proposalId: 'proposal-1', boardMemberId: 'user-6', vote: 'approve', comment: 'Great potential for long-running series.', votedAt: daysAgo(1) },
@@ -433,7 +433,7 @@ export const mockNotifications: Notification[] = [
     userId: 'user-5',
     type: 'vote',
     title: 'Voting Session Open',
-    message: 'Your vote is needed on "Cyber Ninja" proposal. 7 days remaining.',
+    message: 'Your vote is needed on "Cyber Ninja" proposal. 3 days remaining (testing mode).',
     read: false,
     createdAt: daysAgo(2),
     link: '/proposals/proposal-1',

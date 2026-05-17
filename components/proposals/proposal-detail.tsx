@@ -68,12 +68,17 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const [showVoteDialog, setShowVoteDialog] = useState(false)
   const [voteValue, setVoteValue] = useState<'approve' | 'reject' | 'defer' | ''>('')
   const [voteComment, setVoteComment] = useState('')
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectReasonError, setRejectReasonError] = useState<string | null>(null)
 
   const isMangaka = currentUser.role === 'mangaka'
-  const isBoard = currentUser.role === 'board'
+  const isBoard = currentUser.role === 'board' || currentUser.isBoardMember
   const isEditor = currentUser.role === 'editor'
   
   const isOwner = proposal?.mangakaId === currentUser.id
+  
+  // Check if voting window is still active for Board Members
+  const isVotingWindowActive = proposal?.status === 'voting' && proposal?.votingDeadline && !isPast(proposal.votingDeadline)
   const canEdit = isOwner && proposal?.status === 'draft'
   
   // BR-01: Check if mangaka has an active proposal (draft/submitted/voting) other than this one
@@ -272,7 +277,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
         ...formData,
         status: 'voting',
         submittedAt: new Date(),
-        votingDeadline: addDays(new Date(), 7)
+        votingDeadline: addDays(new Date(), 3) // Testing mode: 3 days (production: 7 days)
       }
     })
     setShowSubmitDialog(false)
@@ -281,12 +286,18 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const handleVote = () => {
     if (!voteValue) return
     
+    // BR-VOT-02: Validate reject reason is required
+    if (voteValue === 'reject' && !rejectReason.trim()) {
+      setRejectReasonError('Reason is required (BR-VOT-02)')
+      return
+    }
+    
     const vote: Vote = {
       id: `vote-${Date.now()}`,
       proposalId: proposal.id,
       boardMemberId: currentUser.id,
       vote: voteValue,
-      comment: voteComment || undefined,
+      comment: voteValue === 'reject' ? rejectReason.trim() : (voteComment || undefined),
       votedAt: new Date()
     }
     
@@ -301,7 +312,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
     )
     
     // Only close voting early if ALL eligible members have voted
-    // If only quorum is reached but not all voted, keep window open until 7-day deadline
+    // If only quorum is reached but not all voted, keep window open until 3-day deadline (testing mode)
     if (allEligibleVoted && totalVotes >= 3) {
       // Calculate result when ALL eligible members have voted
       const approves = allVotes.filter(v => v.vote === 'approve').length
@@ -334,6 +345,8 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
     setShowVoteDialog(false)
     setVoteValue('')
     setVoteComment('')
+    setRejectReason('')
+    setRejectReasonError(null)
   }
 
   const getInitials = (name: string) => {
@@ -420,6 +433,47 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Board Member Restricted View: Only show voting interface during active window, result after */}
+          {isBoard && !isMangaka && (
+            <>
+              {/* If voting closed, Board Members only see result, not proposal content */}
+              {!isVotingWindowActive && proposal.status !== 'voting' && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Voting Result</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-3">
+                      {proposal.status === 'approved' && (
+                        <>
+                          <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                          <span className="font-semibold text-emerald-700">Approved</span>
+                        </>
+                      )}
+                      {proposal.status === 'rejected' && (
+                        <>
+                          <XCircle className="w-6 h-6 text-red-600" />
+                          <span className="font-semibold text-red-700">Rejected</span>
+                        </>
+                      )}
+                      {proposal.status === 'deferred' && (
+                        <>
+                          <Clock className="w-6 h-6 text-amber-600" />
+                          <span className="font-semibold text-amber-700">Deferred</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Board Members cannot view proposal details (synopsis, sample chapter, mangaka info) - only voting result is visible.
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+          
+          {/* Full Proposal Details - Hidden from Board Members */}
+          {(!isBoard || isMangaka) && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -502,6 +556,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
               )}
             </CardContent>
           </Card>
+          )}
 
           {/* Voting Section */}
           {proposal.status === 'voting' && (
@@ -526,7 +581,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
                   <Alert className="border-blue-200 bg-blue-50/50">
                     <Clock className="h-4 w-4 text-blue-600" />
                     <AlertDescription className="text-blue-700">
-                      Quorum reached ({proposal.votes.length}/3). Voting remains open until all {eligibleBoardMembers.length} eligible members vote or the 7-day window expires.
+                      Quorum reached ({proposal.votes.length}/3). Voting remains open until all {eligibleBoardMembers.length} eligible members vote or the 3-day window expires (testing mode).
                     </AlertDescription>
                   </Alert>
                 )}
@@ -598,7 +653,8 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
           )}
         </div>
 
-        {/* Sidebar */}
+        {/* Sidebar - Hidden from Board Members (they cannot see mangaka info) */}
+        {(!isBoard || isMangaka) && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -666,6 +722,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
             </CardContent>
           </Card>
         </div>
+        )}
       </div>
 
       {/* Submit Confirmation Dialog */}
@@ -674,7 +731,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
           <DialogHeader>
             <DialogTitle>Submit Proposal for Review?</DialogTitle>
             <DialogDescription>
-              Once submitted, your proposal will enter a 7-day voting period. You will not be able to edit it during this time.
+              Once submitted, your proposal will enter a 3-day voting period (testing mode). You will not be able to edit it during this time.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -698,7 +755,13 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       </Dialog>
 
       {/* Vote Dialog */}
-      <Dialog open={showVoteDialog} onOpenChange={setShowVoteDialog}>
+      <Dialog open={showVoteDialog} onOpenChange={(open) => {
+        setShowVoteDialog(open)
+        if (!open) {
+          setRejectReason('')
+          setRejectReasonError(null)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Cast Your Vote</DialogTitle>
@@ -709,7 +772,10 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Your Decision *</Label>
-              <Select value={voteValue} onValueChange={(v) => setVoteValue(v as typeof voteValue)}>
+              <Select value={voteValue} onValueChange={(v) => {
+                setVoteValue(v as typeof voteValue)
+                setRejectReasonError(null)
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select your vote" />
                 </SelectTrigger>
@@ -735,6 +801,32 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* BR-VOT-02: Required reject reason field */}
+            {voteValue === 'reject' && (
+              <div className="space-y-2">
+                <Label>Rejection Reason *</Label>
+                <Textarea
+                  value={rejectReason}
+                  onChange={(e) => {
+                    setRejectReason(e.target.value)
+                    if (e.target.value.trim()) {
+                      setRejectReasonError(null)
+                    }
+                  }}
+                  placeholder="Please provide a reason for rejecting this proposal (required)..."
+                  rows={3}
+                  className={rejectReasonError ? 'border-red-500' : ''}
+                />
+                {rejectReasonError && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm">
+                    <AlertTriangle className="w-4 h-4" />
+                    {rejectReasonError}
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="space-y-2">
               <Label>Comment (Optional)</Label>
               <Textarea
@@ -749,7 +841,10 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
             <Button variant="outline" onClick={() => setShowVoteDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleVote} disabled={!voteValue}>
+            <Button 
+              onClick={handleVote} 
+              disabled={!voteValue || (voteValue === 'reject' && !rejectReason.trim())}
+            >
               Submit Vote
             </Button>
           </DialogFooter>
