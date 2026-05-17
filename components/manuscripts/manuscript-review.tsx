@@ -1,0 +1,403 @@
+'use client'
+
+import { useState } from 'react'
+import { useApp } from '@/lib/store/app-context'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { SLATimer } from '@/components/ui/countdown-timer'
+import { 
+  ArrowLeft,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  FileText,
+  MessageSquare,
+  History
+} from 'lucide-react'
+import { format, isPast, addDays } from 'date-fns'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Separator } from '@/components/ui/separator'
+
+interface ManuscriptReviewProps {
+  manuscriptId: string
+}
+
+export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
+  const { state, dispatch, navigate, getChapterById, getSeriesById, getManuscriptsByChapterId } = useApp()
+  const { manuscripts, currentUser } = state
+
+  const manuscript = manuscripts.find(m => m.id === manuscriptId)
+  const chapter = manuscript ? getChapterById(manuscript.chapterId) : null
+  const series = chapter ? getSeriesById(chapter.seriesId) : null
+  const allVersions = chapter ? getManuscriptsByChapterId(chapter.id).sort((a, b) => b.version - a.version) : []
+
+  const [showApproveDialog, setShowApproveDialog] = useState(false)
+  const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [feedback, setFeedback] = useState('')
+
+  const isEditor = currentUser.role === 'editor'
+  const canReview = isEditor && manuscript?.status === 'pending'
+
+  const handleApprove = () => {
+    if (!manuscript) return
+    
+    dispatch({
+      type: 'UPDATE_MANUSCRIPT',
+      payload: {
+        ...manuscript,
+        status: 'approved',
+        feedback: feedback || undefined,
+        reviewedAt: new Date()
+      }
+    })
+    setShowApproveDialog(false)
+    setFeedback('')
+  }
+
+  const handleReject = () => {
+    if (!manuscript) return
+    
+    dispatch({
+      type: 'UPDATE_MANUSCRIPT',
+      payload: {
+        ...manuscript,
+        status: 'rejected',
+        feedback: feedback,
+        reviewedAt: new Date()
+      }
+    })
+    setShowRejectDialog(false)
+    setFeedback('')
+  }
+
+  if (!manuscript || !chapter || !series) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" onClick={() => navigate('manuscripts')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Manuscripts
+        </Button>
+        <Card>
+          <CardContent className="p-12 text-center">
+            <p className="text-muted-foreground">Manuscript not found</p>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('manuscripts')}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div>
+            <p className="text-sm text-muted-foreground">{series.title}</p>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">
+                Chapter {chapter.chapterNumber} - Version {manuscript.version}
+              </h1>
+              <StatusBadge status={manuscript.status} />
+            </div>
+          </div>
+        </div>
+        
+        {manuscript.status === 'pending' && (
+          <SLATimer deadline={manuscript.slaDeadline} />
+        )}
+      </div>
+
+      {/* Status Banners */}
+      {manuscript.status === 'approved' && (
+        <Card className="border-emerald-200 bg-emerald-50/50">
+          <CardContent className="flex items-center gap-4 p-4">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            <div>
+              <p className="font-semibold text-emerald-900">Manuscript Approved</p>
+              <p className="text-sm text-emerald-700">
+                Approved on {manuscript.reviewedAt ? format(manuscript.reviewedAt, 'MMMM d, yyyy') : '-'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {manuscript.status === 'rejected' && (
+        <Card className="border-red-200 bg-red-50/50">
+          <CardContent className="flex items-center gap-4 p-4">
+            <XCircle className="w-6 h-6 text-red-600" />
+            <div className="flex-1">
+              <p className="font-semibold text-red-900">Manuscript Rejected</p>
+              <p className="text-sm text-red-700">
+                Please address the feedback and resubmit within 3 days.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Manuscript Preview */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Manuscript Preview</CardTitle>
+              <CardDescription>
+                Review the submitted chapter pages
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-[3/4] bg-muted rounded-lg flex items-center justify-center border-2 border-dashed">
+                <div className="text-center">
+                  <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Manuscript Preview</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {manuscript.fileUrl}
+                  </p>
+                  <Button variant="outline" size="sm" className="mt-4">
+                    Open Full Viewer
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Feedback Section */}
+          {manuscript.feedback && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-muted-foreground" />
+                  <CardTitle>Editor Feedback</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-muted-foreground leading-relaxed">{manuscript.feedback}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Action Buttons for Editor */}
+          {canReview && (
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold">Review Decision</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Approve to publish or reject with feedback
+                    </p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button 
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => setShowRejectDialog(true)}
+                    >
+                      <XCircle className="w-4 h-4 mr-2" />
+                      Reject
+                    </Button>
+                    <Button 
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => setShowApproveDialog(true)}
+                    >
+                      <CheckCircle2 className="w-4 h-4 mr-2" />
+                      Approve
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Manuscript Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Submission Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <StatusBadge status={manuscript.status} />
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Version</span>
+                  <span className="font-medium">{manuscript.version}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Submitted</span>
+                  <span>{format(manuscript.submittedAt, 'MMM d, h:mm a')}</span>
+                </div>
+                {manuscript.reviewedAt && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Reviewed</span>
+                    <span>{format(manuscript.reviewedAt, 'MMM d, h:mm a')}</span>
+                  </div>
+                )}
+              </div>
+
+              {manuscript.status === 'pending' && (
+                <>
+                  <Separator />
+                  <div className="p-3 rounded-lg bg-muted">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Clock className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">SLA Deadline</span>
+                    </div>
+                    <p className={`text-sm ${isPast(manuscript.slaDeadline) ? 'text-red-600' : 'text-muted-foreground'}`}>
+                      {format(manuscript.slaDeadline, 'MMM d, yyyy h:mm a')}
+                    </p>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Version History */}
+          {allVersions.length > 1 && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <History className="w-5 h-5 text-muted-foreground" />
+                  <CardTitle className="text-base">Version History</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {allVersions.map((v) => (
+                    <div 
+                      key={v.id}
+                      className={`p-3 rounded-lg border cursor-pointer hover:bg-muted/50 ${
+                        v.id === manuscript.id ? 'border-primary bg-primary/5' : ''
+                      }`}
+                      onClick={() => navigate(`manuscripts/${v.id}`)}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-sm">Version {v.version}</span>
+                        <StatusBadge status={v.status} />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {format(v.submittedAt, 'MMM d, h:mm a')}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Annotations */}
+          {manuscript.annotations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Annotations</CardTitle>
+                <CardDescription>
+                  {manuscript.annotations.length} annotation{manuscript.annotations.length !== 1 ? 's' : ''}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {manuscript.annotations.map((annotation) => (
+                    <div key={annotation.id} className="p-3 rounded-lg bg-muted">
+                      <p className="text-xs text-muted-foreground mb-1">
+                        Page {annotation.pageNumber}
+                      </p>
+                      <p className="text-sm">{annotation.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Approve Dialog */}
+      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve Manuscript</DialogTitle>
+            <DialogDescription>
+              This manuscript will be marked as approved for publication.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Feedback (Optional)</Label>
+              <Textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Add any positive feedback or notes..."
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowApproveDialog(false)}>
+              Cancel
+            </Button>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleApprove}>
+              Approve Manuscript
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Manuscript</DialogTitle>
+            <DialogDescription>
+              The mangaka will have 3 days to address your feedback and resubmit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Feedback *</Label>
+              <Textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="Explain what needs to be revised..."
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                Be specific about what needs improvement.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleReject}
+              disabled={!feedback.trim()}
+            >
+              Reject with Feedback
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
