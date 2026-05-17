@@ -56,6 +56,8 @@ export const mockUsers: User[] = [
   // Additional Mangaka users for Issue 4
   { id: 'mangaka-2', name: 'Takeshi Nakamura', role: 'mangaka' },
   { id: 'mangaka-3', name: 'Sakura Fujiwara', role: 'mangaka' },
+  // Dual-role user: Mangaka + Board Member (for testing dual role badge display)
+  { id: 'mangaka-board-1', name: 'Ryo Ishikawa', role: 'mangaka', isBoardMember: true },
 ]
 
 // Proposals

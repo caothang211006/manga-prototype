@@ -46,6 +46,7 @@ import {
   Info,
   Gavel,
   Plus,
+  Pencil,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -106,6 +107,13 @@ export function RankingLeaderboard() {
   const [votePeriod, setVotePeriod] = useState('')
   const [dataEntryError, setDataEntryError] = useState<string | null>(null)
   
+  // State for edit ranking dialog
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editingRankingId, setEditingRankingId] = useState<string>('')
+  const [editVoteCount, setEditVoteCount] = useState('')
+  const [editReaderCount, setEditReaderCount] = useState('')
+  const [editError, setEditError] = useState<string | null>(null)
+  
   // Check if current user is Board Member (BR-RNK-02: Only Board Member role can access this form)
   const isBoardMember = state.currentUser.role === 'board' || state.currentUser.isBoardMember
   
@@ -123,7 +131,16 @@ export function RankingLeaderboard() {
       }
     })
     .filter(r => r.series) // Only include rankings with valid series
-    .sort((a, b) => b.voteRate - a.voteRate) // Sort by vote rate descending
+    .sort((a, b) => {
+      // Primary: Sort by vote rate descending
+      if (b.voteRate !== a.voteRate) return b.voteRate - a.voteRate
+      // Tiebreak 1: Higher total votes ranks higher
+      if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount
+      // Tiebreak 2: Earlier publication date ranks higher
+      const aDate = a.series?.publicationDate?.getTime() || 0
+      const bDate = b.series?.publicationDate?.getTime() || 0
+      return aDate - bDate
+    })
   
   // Recalculate positions based on vote rate
   const rankedWithPositions = rankedSeries.map((item, index) => ({
@@ -283,6 +300,67 @@ export function RankingLeaderboard() {
     setVotePeriod('')
   }
   
+  // Handle opening edit dialog
+  const handleOpenEditDialog = (rankingId: string) => {
+    const ranking = state.rankings.find(r => r.id === rankingId)
+    if (!ranking) return
+    
+    setEditingRankingId(rankingId)
+    setEditVoteCount(ranking.voteCount.toString())
+    setEditReaderCount(ranking.readerCount.toString())
+    setEditError(null)
+    setShowEditDialog(true)
+  }
+  
+  // Handle edit ranking submission - recalculates vote rate and re-sorts with tiebreak
+  const handleEditRankingSubmit = () => {
+    setEditError(null)
+    
+    const voteCount = parseInt(editVoteCount, 10)
+    const readerCount = parseInt(editReaderCount, 10)
+    
+    // BR-RNK-05: Reader Count must be > 0
+    if (isNaN(readerCount) || readerCount <= 0) {
+      setEditError('Reader count must be greater than 0 (BR-RNK-05)')
+      return
+    }
+    
+    // BR-RNK-04: Vote Count cannot be negative
+    if (isNaN(voteCount) || voteCount < 0) {
+      setEditError('Vote count cannot be negative (BR-RNK-04)')
+      return
+    }
+    
+    // BR-RNK-03: Vote Count cannot exceed Reader Count
+    if (voteCount > readerCount) {
+      setEditError('Vote count cannot exceed reader count (BR-RNK-03)')
+      return
+    }
+    
+    const ranking = state.rankings.find(r => r.id === editingRankingId)
+    if (!ranking) return
+    
+    // Calculate new vote rate
+    const newScore = Math.round((voteCount / readerCount) * 100 * 100) / 100
+    
+    // Update ranking
+    dispatch({
+      type: 'UPDATE_RANKING',
+      payload: {
+        ...ranking,
+        voteCount,
+        readerCount,
+        score: newScore,
+        flagged: newScore < 20,
+      }
+    })
+    
+    setShowEditDialog(false)
+    setEditingRankingId('')
+    setEditVoteCount('')
+    setEditReaderCount('')
+  }
+  
   // Calculate average vote rate
   const avgVoteRate = rankedWithPositions.length > 0
     ? Math.round(rankedWithPositions.reduce((acc, s) => acc + s.voteRate, 0) / rankedWithPositions.length * 100) / 100
@@ -398,6 +476,7 @@ export function RankingLeaderboard() {
                 <TableHead className="text-right">Total Votes</TableHead>
                 <TableHead className="text-center">Publication Date</TableHead>
                 <TableHead className="text-center">Reader Count</TableHead>
+                {isBoardMember && <TableHead className="w-20">Edit</TableHead>}
                 <TableHead className="w-24"></TableHead>
               </TableRow>
             </TableHeader>
@@ -449,6 +528,17 @@ export function RankingLeaderboard() {
                         {item.readerCount.toLocaleString()}
                       </span>
                     </TableCell>
+                    {isBoardMember && (
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleOpenEditDialog(item.id)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    )}
                     <TableCell>
                       {isAtRisk && canTriggerReview && (
                         <TooltipProvider>
@@ -477,57 +567,6 @@ export function RankingLeaderboard() {
               })}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
-      
-      {/* Tiebreak Rules Info */}
-      <Card className="border-dashed">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <Info className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base">Tiebreak Rules</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            If 2 series have equal Vote Rate (e.g. both 80%), the one with higher Total Votes ranks higher.
-            If Total Votes are also equal, the one with earlier Publication Date ranks higher.
-          </p>
-          
-          {/* Example Table */}
-          <div className="rounded-lg border overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead className="w-16">Rank</TableHead>
-                  <TableHead>Series</TableHead>
-                  <TableHead className="text-right">Vote Rate</TableHead>
-                  <TableHead className="text-right">Total Votes</TableHead>
-                  <TableHead className="text-center">Publication Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow>
-                  <TableCell className="font-medium">#1</TableCell>
-                  <TableCell className="text-muted-foreground">Series A</TableCell>
-                  <TableCell className="text-right">80%</TableCell>
-                  <TableCell className="text-right font-medium">15,000</TableCell>
-                  <TableCell className="text-center text-muted-foreground">Jan 15, 2024</TableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell className="font-medium">#2</TableCell>
-                  <TableCell className="text-muted-foreground">Series B</TableCell>
-                  <TableCell className="text-right">80%</TableCell>
-                  <TableCell className="text-right">12,000</TableCell>
-                  <TableCell className="text-center text-muted-foreground">Jan 10, 2024</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-          <p className="text-xs text-muted-foreground italic">
-            Example: Series A ranks higher than Series B because both have 80% vote rate, 
-            but Series A has more total votes (15,000 vs 12,000).
-          </p>
         </CardContent>
       </Card>
       
@@ -624,6 +663,89 @@ export function RankingLeaderboard() {
               disabled={!selectedSeriesId || !readerCountInput || !voteCountInput || !votePeriod}
             >
               Submit Data
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Ranking Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open)
+        if (!open) {
+          setEditError(null)
+          setEditingRankingId('')
+          setEditVoteCount('')
+          setEditReaderCount('')
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Vote Data</DialogTitle>
+            <DialogDescription>
+              Update the vote data for this series. Rankings will be automatically recalculated with tiebreak logic.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-vote-count">Total Votes *</Label>
+              <Input 
+                id="edit-vote-count" 
+                type="number"
+                min="0"
+                value={editVoteCount} 
+                onChange={(e) => {
+                  setEditVoteCount(e.target.value)
+                  setEditError(null)
+                }}
+                placeholder="Enter total votes"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="edit-reader-count">Reader Count *</Label>
+              <Input 
+                id="edit-reader-count" 
+                type="number"
+                min="1"
+                value={editReaderCount} 
+                onChange={(e) => {
+                  setEditReaderCount(e.target.value)
+                  setEditError(null)
+                }}
+                placeholder="Enter reader count (must be > 0)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Vote Rate = (Total Votes / Reader Count) x 100%
+              </p>
+            </div>
+            
+            {editVoteCount && editReaderCount && (
+              <div className="p-3 bg-muted rounded-md">
+                <p className="text-sm">
+                  <span className="text-muted-foreground">New Vote Rate: </span>
+                  <span className="font-semibold">
+                    {calculateVoteRate(parseInt(editVoteCount, 10) || 0, parseInt(editReaderCount, 10) || 1)}%
+                  </span>
+                </p>
+              </div>
+            )}
+            
+            {editError && (
+              <div className="flex items-center gap-2 text-destructive text-sm p-3 bg-destructive/10 rounded-md">
+                <AlertTriangle className="h-4 w-4" />
+                {editError}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleEditRankingSubmit}
+              disabled={!editVoteCount || !editReaderCount}
+            >
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

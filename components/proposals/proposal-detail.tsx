@@ -270,6 +270,33 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
     )
   }
 
+  // Board Members have NO access to proposal detail pages at all
+  // They can only vote from the proposals list
+  if (isBoard) {
+    return (
+      <div className="space-y-6">
+        <Button variant="ghost" onClick={() => navigate('proposals')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          Back to Proposals
+        </Button>
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardContent className="flex items-center gap-4 p-8">
+            <AlertTriangle className="w-8 h-8 text-amber-600" />
+            <div>
+              <p className="font-semibold text-amber-900 text-lg">Access Restricted</p>
+              <p className="text-sm text-amber-700 mt-1">
+                Board Members do not have access to proposal detail pages to maintain voting impartiality.
+              </p>
+              <p className="text-xs text-amber-600 mt-2">
+                You can vote on proposals directly from the Proposals list page.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   const handleUpdate = () => {
     dispatch({
       type: 'UPDATE_PROPOSAL',
@@ -445,26 +472,31 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
         </Card>
       )}
       
-      {proposal.status === 'rejected' && (
+      {/* Rejection Banner with 30-day cooldown - Only visible to Mangaka (proposal owner) - BR-RES-02 */}
+      {proposal.status === 'rejected' && isOwner && (
         <Card className="border-red-200 bg-red-50/50">
-          <CardContent className="flex items-center gap-4 p-4">
-            <XCircle className="w-6 h-6 text-red-600" />
-            <div className="flex-1">
-              <p className="font-semibold text-red-900">Proposal Rejected</p>
-              <p className="text-sm text-red-700">
-                Unfortunately, your proposal was not approved at this time.
-                {/* BR-RES-02: Tie = Rejected; Mangaka may resubmit after 30 days */}
-              </p>
-              <p className="text-xs text-red-600 mt-1">
-                You may resubmit after the 30-day cooldown period (BR-RES-02).
-              </p>
-            </div>
-            {proposal.rejectionCooldownEnd && !isPast(proposal.rejectionCooldownEnd) && (
-              <div className="text-right">
-                <p className="text-xs text-red-700">Cooldown ends</p>
-                <CountdownTimer deadline={proposal.rejectionCooldownEnd} variant="compact" />
+          <CardContent className="p-4">
+            <div className="flex items-start gap-4">
+              <XCircle className="w-6 h-6 text-red-600 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-red-900">Proposal Rejected</p>
+                <p className="text-sm text-red-700 mt-1">
+                  Unfortunately, your proposal was not approved at this time.
+                </p>
+                <p className="text-xs text-red-600 mt-2">
+                  You may resubmit after the 30-day cooldown period (BR-RES-02).
+                </p>
               </div>
-            )}
+              {proposal.rejectionCooldownEnd && !isPast(proposal.rejectionCooldownEnd) && (
+                <div className="text-right bg-red-100 rounded-lg p-3">
+                  <p className="text-xs text-red-700 font-medium mb-1">Cooldown remaining</p>
+                  <CountdownTimer deadline={proposal.rejectionCooldownEnd} variant="compact" />
+                  <p className="text-xs text-red-600 mt-1">
+                    {format(proposal.rejectionCooldownEnd, 'MMM d, yyyy')}
+                  </p>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

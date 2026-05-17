@@ -30,6 +30,14 @@ const roleColors: Record<UserRole, string> = {
   board: 'bg-violet-500 text-white',
 }
 
+// Helper to get display label for a user (showing dual roles if applicable)
+const getUserRoleLabel = (user: { role: UserRole; isBoardMember?: boolean }) => {
+  if (user.isBoardMember && user.role !== 'board') {
+    return `${roleLabels[user.role]} + Board`
+  }
+  return roleLabels[user.role]
+}
+
 export function Header() {
   const { state, setCurrentUser, getUnreadNotificationCount, navigate, dispatch } = useApp()
   const { currentUser, users } = state
@@ -50,9 +58,17 @@ export function Header() {
         <h1 className="text-lg font-semibold text-foreground">
           {roleLabels[currentUser.role]} Dashboard
         </h1>
-        <Badge variant="secondary" className={cn("text-xs", roleColors[currentUser.role])}>
-          {roleLabels[currentUser.role]}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className={cn("text-xs", roleColors[currentUser.role])}>
+            {roleLabels[currentUser.role]}
+          </Badge>
+          {/* Show dual role badge if user has isBoardMember flag */}
+          {currentUser.isBoardMember && currentUser.role !== 'board' && (
+            <Badge variant="secondary" className={cn("text-xs", roleColors['board'])}>
+              + Board Member
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -106,7 +122,14 @@ export function Header() {
                 </Avatar>
                 <div className="flex flex-col flex-1">
                   <span className="text-sm font-medium">{user.name}</span>
-                  <span className="text-xs text-muted-foreground">{roleLabels[user.role]}</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-muted-foreground">{roleLabels[user.role]}</span>
+                    {user.isBoardMember && user.role !== 'board' && (
+                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-violet-100 text-violet-700 border-violet-200">
+                        +Board
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 {currentUser.id === user.id && (
                   <Check className="w-4 h-4 text-primary" />
