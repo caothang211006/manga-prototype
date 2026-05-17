@@ -17,8 +17,8 @@ import {
   FileText,
   MessageSquare,
   History,
-  Plus,
-  AlertTriangle
+  AlertTriangle,
+  CalendarClock
 } from 'lucide-react'
 import { format, isPast, addDays } from 'date-fns'
 import {
@@ -49,14 +49,19 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [feedback, setFeedback] = useState('')
   
-  // Annotation form state
-  const [showAnnotationForm, setShowAnnotationForm] = useState(false)
+  // Issue 8: Always-visible inline annotation form state
   const [annotationPageNumber, setAnnotationPageNumber] = useState('')
   const [annotationComment, setAnnotationComment] = useState('')
   const [annotationError, setAnnotationError] = useState<string | null>(null)
 
   const isEditor = currentUser.role === 'editor'
+  const isMangaka = currentUser.role === 'mangaka'
   const canReview = isEditor && manuscript?.status === 'pending'
+
+  // BR-MAN-10: Resubmit deadline for rejected manuscripts (rejection timestamp + 3 days)
+  const resubmitDeadline = manuscript?.status === 'rejected' && manuscript?.reviewedAt 
+    ? addDays(manuscript.reviewedAt, 3)
+    : null
 
   const handleApprove = () => {
     if (!manuscript) return
@@ -90,7 +95,7 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
     setFeedback('')
   }
 
-  // Handle adding annotation
+  // Issue 7 & 8: Handle adding annotation with page number validation
   const handleAddAnnotation = () => {
     setAnnotationError(null)
     
@@ -110,9 +115,11 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
     
     // Validate comment is not empty
     if (!annotationComment.trim()) {
-      setAnnotationError('Annotation comment is required')
+      setAnnotationError('Comment is required')
       return
     }
+    
+    if (!manuscript) return
     
     const newAnnotation: Annotation = {
       id: `anno-${Date.now()}`,
@@ -134,7 +141,6 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
     // Reset form
     setAnnotationPageNumber('')
     setAnnotationComment('')
-    setShowAnnotationForm(false)
   }
 
   if (!manuscript || !chapter || !series) {
@@ -172,7 +178,8 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
           </div>
         </div>
         
-        {manuscript.status === 'pending' && (
+        {/* Issue 7: SLA timer only for Editor on pending manuscripts */}
+        {isEditor && manuscript.status === 'pending' && (
           <SLATimer deadline={manuscript.slaDeadline} />
         )}
       </div>
@@ -199,8 +206,21 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
             <div className="flex-1">
               <p className="font-semibold text-red-900">Manuscript Rejected</p>
               <p className="text-sm text-red-700">
-                Please address the feedback and resubmit within 3 days.
+                {isMangaka 
+                  ? 'Please address the feedback and resubmit.'
+                  : 'The mangaka has 3 days to address your feedback and resubmit.'
+                }
               </p>
+              {/* Issue 6: Show resubmit deadline for Mangaka (BR-MAN-10) */}
+              {isMangaka && resubmitDeadline && (
+                <div className="flex items-center gap-2 mt-2 text-sm">
+                  <CalendarClock className="w-4 h-4 text-red-600" />
+                  <span className={isPast(resubmitDeadline) ? 'text-red-700 font-medium' : 'text-red-600'}>
+                    Resubmit by: {format(resubmitDeadline, 'MMM d, yyyy h:mm a')}
+                    {isPast(resubmitDeadline) && ' (Overdue)'}
+                  </span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -209,38 +229,52 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Manuscript Preview */}
+          {/* Manuscript Preview - Issue 8: Show 3 pages */}
           <Card>
             <CardHeader>
               <CardTitle>Manuscript Preview</CardTitle>
               <CardDescription>
-                Review the submitted chapter pages
+                Review the submitted chapter pages (3 pages)
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="aspect-[3/4] bg-muted rounded-lg flex items-center justify-center border-2 border-dashed">
-                <div className="text-center">
-                  <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Manuscript Preview</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {manuscript.fileUrl}
-                  </p>
-                  <Button variant="outline" size="sm" className="mt-4">
-                    Open Full Viewer
-                  </Button>
-                </div>
+              <div className="grid grid-cols-3 gap-4">
+                {[1, 2, 3].map((pageNum) => (
+                  <div 
+                    key={pageNum}
+                    className="aspect-[3/4] bg-muted rounded-lg flex items-center justify-center border-2 border-dashed"
+                  >
+                    <div className="text-center p-2">
+                      <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-1" />
+                      <p className="text-xs text-muted-foreground">Page {pageNum}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 text-center">
+                <p className="text-xs text-muted-foreground mb-2">
+                  {manuscript.fileUrl}
+                </p>
+                <Button variant="outline" size="sm">
+                  Open Full Viewer
+                </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Feedback Section */}
+          {/* Feedback Section - Show for Mangaka if rejected */}
           {manuscript.feedback && (
-            <Card>
+            <Card className={manuscript.status === 'rejected' ? 'border-amber-200' : ''}>
               <CardHeader>
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-5 h-5 text-muted-foreground" />
                   <CardTitle>Editor Feedback</CardTitle>
                 </div>
+                {isMangaka && manuscript.status === 'rejected' && (
+                  <CardDescription className="text-amber-600">
+                    Please address these issues before resubmitting
+                  </CardDescription>
+                )}
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground leading-relaxed">{manuscript.feedback}</p>
@@ -311,7 +345,8 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
                 )}
               </div>
 
-              {manuscript.status === 'pending' && (
+              {/* Issue 7: SLA info only for Editor on pending manuscripts */}
+              {isEditor && manuscript.status === 'pending' && (
                 <>
                   <Separator />
                   <div className="p-3 rounded-lg bg-muted space-y-2">
@@ -369,81 +404,61 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
             </Card>
           )}
 
-          {/* Annotations */}
-          {/* Always show annotations card for editors to add annotations */}
-          {(manuscript.annotations.length > 0 || isEditor) && (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">Annotations</CardTitle>
-                    <CardDescription>
-                      {manuscript.annotations.length} annotation{manuscript.annotations.length !== 1 ? 's' : ''}
-                    </CardDescription>
-                  </div>
-                  {isEditor && !showAnnotationForm && (
-                    <Button size="sm" variant="outline" onClick={() => setShowAnnotationForm(true)}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Add
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Add Annotation Form */}
-                {showAnnotationForm && (
-                  <div className="p-4 rounded-lg border bg-muted/50 space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="page-number">Page Number *</Label>
-                      <Input
-                        id="page-number"
-                        type="number"
-                        min="1"
-                        value={annotationPageNumber}
-                        onChange={(e) => {
-                          setAnnotationPageNumber(e.target.value)
-                          setAnnotationError(null)
-                        }}
-                        placeholder="Enter page number"
-                        className={annotationError?.includes('Page number') ? 'border-red-500' : ''}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="annotation-comment">Comment *</Label>
-                      <Textarea
-                        id="annotation-comment"
-                        value={annotationComment}
-                        onChange={(e) => {
-                          setAnnotationComment(e.target.value)
-                          setAnnotationError(null)
-                        }}
-                        placeholder="Enter annotation comment..."
-                        rows={3}
-                      />
-                    </div>
-                    {annotationError && (
-                      <div className="flex items-center gap-2 text-red-500 text-sm">
-                        <AlertTriangle className="h-4 w-4" />
-                        {annotationError}
-                      </div>
-                    )}
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => {
-                        setShowAnnotationForm(false)
-                        setAnnotationPageNumber('')
-                        setAnnotationComment('')
+          {/* Issue 7 & 8: Annotations - Always visible inline form for Editors */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Annotations</CardTitle>
+              <CardDescription>
+                {manuscript.annotations.length} annotation{manuscript.annotations.length !== 1 ? 's' : ''}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Issue 8: Always-visible inline form for Editors (no "Add Annotation" button) */}
+              {isEditor && (
+                <div className="p-4 rounded-lg border bg-muted/50 space-y-3">
+                  <p className="text-sm font-medium">Add Annotation</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="page-number">Page Number *</Label>
+                    <Input
+                      id="page-number"
+                      type="number"
+                      min="1"
+                      value={annotationPageNumber}
+                      onChange={(e) => {
+                        setAnnotationPageNumber(e.target.value)
                         setAnnotationError(null)
-                      }}>
-                        Cancel
-                      </Button>
-                      <Button size="sm" onClick={handleAddAnnotation}>
-                        Add Annotation
-                      </Button>
-                    </div>
+                      }}
+                      placeholder="Enter page number"
+                      className={annotationError?.includes('Page number') ? 'border-red-500' : ''}
+                    />
                   </div>
-                )}
-                
-                {/* Existing Annotations */}
+                  <div className="space-y-2">
+                    <Label htmlFor="annotation-comment">Comment *</Label>
+                    <Textarea
+                      id="annotation-comment"
+                      value={annotationComment}
+                      onChange={(e) => {
+                        setAnnotationComment(e.target.value)
+                        setAnnotationError(null)
+                      }}
+                      placeholder="Enter annotation comment..."
+                      rows={3}
+                    />
+                  </div>
+                  {annotationError && (
+                    <div className="flex items-center gap-2 text-red-500 text-sm">
+                      <AlertTriangle className="h-4 w-4" />
+                      {annotationError}
+                    </div>
+                  )}
+                  <Button size="sm" onClick={handleAddAnnotation} className="w-full">
+                    Save Annotation
+                  </Button>
+                </div>
+              )}
+              
+              {/* Existing Annotations List */}
+              {manuscript.annotations.length > 0 ? (
                 <div className="space-y-3">
                   {manuscript.annotations.map((annotation) => (
                     <div key={annotation.id} className="p-3 rounded-lg bg-muted">
@@ -454,9 +469,13 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
-          )}
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-2">
+                  No annotations yet
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
 

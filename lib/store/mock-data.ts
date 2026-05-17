@@ -53,6 +53,9 @@ export const mockUsers: User[] = [
   { id: 'bm-d', name: 'Board Member D', role: 'board', conflictSeries: ['series-2'] },
   // Board Member E: active, is ALSO Tantou Editor of Shadow Chronicles - has conflict of interest
   { id: 'bm-e', name: 'Board Member E (Conflict - Shadow Chronicles)', role: 'board', conflictSeries: ['series-2'] },
+  // Additional Mangaka users for Issue 4
+  { id: 'mangaka-2', name: 'Takeshi Nakamura', role: 'mangaka' },
+  { id: 'mangaka-3', name: 'Sakura Fujiwara', role: 'mangaka' },
 ]
 
 // Proposals
@@ -83,6 +86,47 @@ export const mockProposals: Proposal[] = [
     status: 'draft',
     mangakaId: 'user-1',
     createdAt: daysAgo(2),
+    votes: [],
+  },
+  // Issue 4: "Storm Rider" by Takeshi Nakamura - status: Voting (active, 2 days left)
+  {
+    id: 'proposal-storm-rider',
+    title: 'Storm Rider',
+    genre: 'Action',
+    synopsis: 'A young motorcycle racer discovers he has the ability to control lightning, leading him into a world of underground supernatural racing where the stakes are life and death. He must master his powers while uncovering a conspiracy that threatens to destroy the racing world he loves.',
+    sampleChapterUrl: '/samples/storm-rider-ch1.pdf',
+    status: 'voting',
+    mangakaId: 'mangaka-2', // Takeshi Nakamura
+    createdAt: daysAgo(10),
+    submittedAt: daysAgo(5),
+    votingDeadline: daysFromNow(2), // 2 days left
+    votes: [
+      { id: 'vote-sr-1', proposalId: 'proposal-storm-rider', boardMemberId: 'bm-c', vote: 'approve', comment: 'Fresh take on racing manga.', votedAt: daysAgo(2) },
+    ],
+  },
+  // Issue 4: "Cherry Blossom Academy" by Sakura Fujiwara - status: Submitted
+  {
+    id: 'proposal-cherry-blossom',
+    title: 'Cherry Blossom Academy',
+    genre: 'Romance',
+    synopsis: 'At an elite academy where students are paired based on compatibility algorithms, one rebellious girl and a mysterious transfer student find themselves matched despite being polar opposites. As they navigate school politics and their growing feelings, they discover the academy hides dark secrets about its matching system.',
+    sampleChapterUrl: '/samples/cherry-blossom-ch1.pdf',
+    status: 'submitted',
+    mangakaId: 'mangaka-3', // Sakura Fujiwara
+    createdAt: daysAgo(5),
+    submittedAt: daysAgo(1),
+    votes: [],
+  },
+  // Issue 4: "Iron Fist Chronicles" by Yuki Tanaka - status: Draft
+  {
+    id: 'proposal-iron-fist',
+    title: 'Iron Fist Chronicles',
+    genre: 'Sports',
+    synopsis: 'A retired boxing champion must come out of retirement to save his struggling gym and train a promising but troubled youth who reminds him of his younger self.',
+    sampleChapterUrl: '',
+    status: 'draft',
+    mangakaId: 'user-1', // Yuki Tanaka
+    createdAt: daysAgo(1),
     votes: [],
   },
 ]
@@ -257,6 +301,7 @@ export const mockTasks: Task[] = [
 // Manuscripts
 // Testing mode: 48 minutes SLA (production: 48 hours)
 // Reminder sent at 36 minutes (12 minutes remaining)
+// Issue 8: Updated to have 3 pages of annotations
 export const mockManuscripts: Manuscript[] = [
   {
     id: 'manuscript-1',
@@ -266,7 +311,10 @@ export const mockManuscripts: Manuscript[] = [
     submittedAt: minutesAgo(18), // 18 minutes ago
     status: 'pending',
     slaDeadline: minutesFromNow(30), // 30 minutes remaining (48-18=30)
-    annotations: [],
+    annotations: [
+      { id: 'anno-m1-1', pageNumber: 1, x: 0, y: 0, comment: 'Great opening panel composition', createdAt: minutesAgo(10) },
+      { id: 'anno-m1-2', pageNumber: 2, x: 0, y: 0, comment: 'Consider adding more detail to the background', createdAt: minutesAgo(8) },
+    ],
     feedback: undefined,
   },
   {
@@ -278,10 +326,29 @@ export const mockManuscripts: Manuscript[] = [
     status: 'approved',
     slaDeadline: daysAgo(8),
     annotations: [
-      { id: 'anno-1', pageNumber: 3, x: 120, y: 340, comment: 'Excellent detail on the dragon scales!', createdAt: daysAgo(9) },
+      { id: 'anno-1', pageNumber: 1, x: 120, y: 340, comment: 'Excellent detail on the dragon scales!', createdAt: daysAgo(9) },
+      { id: 'anno-2', pageNumber: 2, x: 50, y: 200, comment: 'The perspective here is perfect.', createdAt: daysAgo(9) },
+      { id: 'anno-3', pageNumber: 3, x: 180, y: 100, comment: 'Love the action sequence layout.', createdAt: daysAgo(9) },
     ],
     feedback: 'Great work! The action sequences are particularly dynamic.',
     reviewedAt: daysAgo(9),
+  },
+  // Add a rejected manuscript for testing Issue 6 (Mangaka view - resubmit deadline)
+  {
+    id: 'manuscript-3',
+    chapterId: 'chapter-3',
+    version: 1,
+    fileUrl: '/manuscripts/shadow-chronicles-ch4-v1.pdf',
+    submittedAt: daysAgo(5),
+    status: 'rejected',
+    slaDeadline: daysAgo(3),
+    annotations: [
+      { id: 'anno-m3-1', pageNumber: 1, x: 0, y: 0, comment: 'The character proportions need work', createdAt: daysAgo(4) },
+      { id: 'anno-m3-2', pageNumber: 2, x: 0, y: 0, comment: 'Background is too cluttered', createdAt: daysAgo(4) },
+      { id: 'anno-m3-3', pageNumber: 3, x: 0, y: 0, comment: 'Panel flow is confusing', createdAt: daysAgo(4) },
+    ],
+    feedback: 'Please revise the character proportions on page 1, simplify the background on page 2, and improve the panel flow on page 3 for better readability.',
+    reviewedAt: daysAgo(2),
   },
 ]
 
@@ -289,6 +356,7 @@ export const mockManuscripts: Manuscript[] = [
 // Bottom 20% flagging: floor(totalSeries * 0.20), minimum 1
 // With 5 active series: floor(5 * 0.20) = 1 series flagged
 // Only rank #5 (Shadow Chronicles) should be flagged
+// Spirit Hunter (rank #4) should NOT be flagged
 export const mockRankings: RankingEntry[] = [
   {
     id: 'rank-1',
@@ -325,18 +393,18 @@ export const mockRankings: RankingEntry[] = [
   },
   {
     id: 'rank-4',
-    seriesId: 'series-6',
+    seriesId: 'series-6', // Spirit Hunter
     votePeriod: '2024-W48',
     readerCount: 50000,
     voteCount: 9000,
     score: 18,
     position: 4,
     trend: 'down',
-    flagged: false, // NOT flagged - Spirit Hunter is rank #4, not in bottom 20%
+    flagged: false, // Spirit Hunter is rank #4, NOT in bottom 20% (only rank #5 is flagged)
   },
   {
     id: 'rank-5',
-    seriesId: 'series-2',
+    seriesId: 'series-2', // Shadow Chronicles
     votePeriod: '2024-W48',
     readerCount: 40000,
     voteCount: 6000,

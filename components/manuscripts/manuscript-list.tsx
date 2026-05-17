@@ -18,9 +18,12 @@ import {
   ArrowRight,
   Clock,
   AlertTriangle,
-  FileText
+  FileText,
+  CheckCircle2,
+  XCircle,
+  CalendarClock
 } from 'lucide-react'
-import { format, isPast, differenceInHours } from 'date-fns'
+import { format, isPast, differenceInMinutes, addDays } from 'date-fns'
 
 export function ManuscriptList() {
   const { state, navigate, getSeriesById, getChapterById } = useApp()
@@ -49,13 +52,23 @@ export function ManuscriptList() {
 
   const pendingManuscripts = sortedManuscripts.filter(m => m.status === 'pending')
   const reviewedManuscripts = sortedManuscripts.filter(m => m.status !== 'pending')
+  
+  // Separate rejected manuscripts for Mangaka (to show resubmit deadline)
+  const rejectedManuscripts = reviewedManuscripts.filter(m => m.status === 'rejected')
+  const approvedManuscripts = reviewedManuscripts.filter(m => m.status === 'approved')
 
-  // Count SLA breaches
-  const breachedCount = pendingManuscripts.filter(m => isPast(m.slaDeadline)).length
-  const urgentCount = pendingManuscripts.filter(m => {
-    const hoursRemaining = differenceInHours(m.slaDeadline, new Date())
-    return hoursRemaining <= 12 && hoursRemaining > 0
-  }).length
+  // Editor-only: Count SLA metrics (using minutes for testing mode)
+  const breachedCount = isEditor ? pendingManuscripts.filter(m => isPast(m.slaDeadline)).length : 0
+  const urgentCount = isEditor ? pendingManuscripts.filter(m => {
+    const minutesRemaining = differenceInMinutes(m.slaDeadline, new Date())
+    return minutesRemaining <= 12 && minutesRemaining > 0 // Less than 12 minutes remaining
+  }).length : 0
+
+  // Calculate resubmit deadline for rejected manuscripts (rejection timestamp + 3 days) BR-MAN-10
+  const getResubmitDeadline = (reviewedAt: Date | undefined) => {
+    if (!reviewedAt) return null
+    return addDays(reviewedAt, 3)
+  }
 
   return (
     <div className="space-y-6">
@@ -63,11 +76,11 @@ export function ManuscriptList() {
       <div>
         <h1 className="text-2xl font-bold">Manuscripts</h1>
         <p className="text-muted-foreground">
-          {isEditor ? 'Review chapter manuscripts within 48h SLA' : 'Track your manuscript submissions'}
+          {isEditor ? 'Review chapter manuscripts within 48 minutes SLA (testing mode)' : 'Track your manuscript submissions'}
         </p>
       </div>
 
-      {/* SLA Alert */}
+      {/* SLA Alert - Editor Only (Issue 6: Remove from Mangaka view) */}
       {isEditor && (breachedCount > 0 || urgentCount > 0) && (
         <Card className={breachedCount > 0 ? 'border-red-200 bg-red-50/50' : 'border-amber-200 bg-amber-50/50'}>
           <CardContent className="flex items-center gap-4 p-4">
@@ -79,7 +92,7 @@ export function ManuscriptList() {
                     {breachedCount} SLA Breach{breachedCount !== 1 ? 'es' : ''}
                   </p>
                   <p className="text-sm text-red-700">
-                    These manuscripts have exceeded the 48-hour review window.
+                    These manuscripts have exceeded the 48-minute review window (testing mode).
                   </p>
                 </div>
               </>
@@ -91,7 +104,7 @@ export function ManuscriptList() {
                     {urgentCount} Manuscript{urgentCount !== 1 ? 's' : ''} Need Urgent Review
                   </p>
                   <p className="text-sm text-amber-700">
-                    Less than 12 hours remaining on SLA.
+                    Less than 12 minutes remaining on SLA.
                   </p>
                 </div>
               </>
@@ -100,7 +113,7 @@ export function ManuscriptList() {
         </Card>
       )}
 
-      {/* Stats */}
+      {/* Stats - Different for Editor vs Mangaka */}
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="p-4">
@@ -108,41 +121,80 @@ export function ManuscriptList() {
               <FileText className="w-5 h-5 text-violet-500" />
               <div>
                 <p className="text-2xl font-bold">{pendingManuscripts.length}</p>
-                <p className="text-xs text-muted-foreground">Pending Review</p>
+                <p className="text-xs text-muted-foreground">
+                  {isMangaka ? 'Awaiting Review' : 'Pending Review'}
+                </p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Clock className="w-5 h-5 text-amber-500" />
-              <div>
-                <p className="text-2xl font-bold text-amber-600">{urgentCount}</p>
-                <p className="text-xs text-muted-foreground">Urgent (less than 12h)</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              <div>
-                <p className="text-2xl font-bold text-red-600">{breachedCount}</p>
-                <p className="text-xs text-muted-foreground">SLA Breached</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        
+        {/* Editor-only stats: Urgent and SLA Breached (Issue 6: Remove from Mangaka) */}
+        {isEditor && (
+          <>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Clock className="w-5 h-5 text-amber-500" />
+                  <div>
+                    <p className="text-2xl font-bold text-amber-600">{urgentCount}</p>
+                    <p className="text-xs text-muted-foreground">Urgent (less than 12 min)</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                  <div>
+                    <p className="text-2xl font-bold text-red-600">{breachedCount}</p>
+                    <p className="text-xs text-muted-foreground">SLA Breached</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
+        
+        {/* Mangaka-only stats: Approved and Rejected (Issue 6) */}
+        {isMangaka && (
+          <>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                  <div>
+                    <p className="text-2xl font-bold text-emerald-600">{approvedManuscripts.length}</p>
+                    <p className="text-xs text-muted-foreground">Approved</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <XCircle className="w-5 h-5 text-red-500" />
+                  <div>
+                    <p className="text-2xl font-bold text-red-600">{rejectedManuscripts.length}</p>
+                    <p className="text-xs text-muted-foreground">Needs Revision</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
 
       {/* Pending Manuscripts */}
       <Card>
         <CardHeader>
-          <CardTitle>Pending Review</CardTitle>
+          <CardTitle>{isMangaka ? 'Awaiting Review' : 'Pending Review'}</CardTitle>
           <CardDescription>
-            Manuscripts awaiting editorial review
+            {isMangaka 
+              ? 'Manuscripts submitted, awaiting editor feedback'
+              : 'Manuscripts awaiting your editorial review'
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -163,7 +215,8 @@ export function ManuscriptList() {
                   <TableHead>Chapter</TableHead>
                   <TableHead>Version</TableHead>
                   <TableHead>Submitted</TableHead>
-                  <TableHead>SLA Status</TableHead>
+                  {/* Issue 6: SLA Status column only for Editor */}
+                  {isEditor && <TableHead>SLA Status</TableHead>}
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -180,9 +233,12 @@ export function ManuscriptList() {
                       </TableCell>
                       <TableCell>v{manuscript.version}</TableCell>
                       <TableCell>{format(manuscript.submittedAt, 'MMM d, h:mm a')}</TableCell>
-                      <TableCell>
-                        <SLATimer deadline={manuscript.slaDeadline} />
-                      </TableCell>
+                      {/* Issue 6: SLA timer only for Editor */}
+                      {isEditor && (
+                        <TableCell>
+                          <SLATimer deadline={manuscript.slaDeadline} />
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Button 
                           size="sm" 
@@ -201,7 +257,7 @@ export function ManuscriptList() {
         </CardContent>
       </Card>
 
-      {/* Reviewed Manuscripts */}
+      {/* Review History */}
       {reviewedManuscripts.length > 0 && (
         <Card>
           <CardHeader>
@@ -219,6 +275,8 @@ export function ManuscriptList() {
                   <TableHead>Version</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Reviewed</TableHead>
+                  {/* Issue 6: Show resubmit deadline for Mangaka on rejected manuscripts */}
+                  {isMangaka && <TableHead>Resubmit By</TableHead>}
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -226,6 +284,9 @@ export function ManuscriptList() {
                 {reviewedManuscripts.map((manuscript) => {
                   const chapter = getChapterById(manuscript.chapterId)
                   const series = chapter ? getSeriesById(chapter.seriesId) : null
+                  const resubmitDeadline = manuscript.status === 'rejected' 
+                    ? getResubmitDeadline(manuscript.reviewedAt) 
+                    : null
                   
                   return (
                     <TableRow key={manuscript.id}>
@@ -243,6 +304,21 @@ export function ManuscriptList() {
                           : '-'
                         }
                       </TableCell>
+                      {/* Issue 6: Resubmit deadline for rejected manuscripts (BR-MAN-10) */}
+                      {isMangaka && (
+                        <TableCell>
+                          {resubmitDeadline && manuscript.status === 'rejected' ? (
+                            <div className="flex items-center gap-1 text-sm">
+                              <CalendarClock className="w-3 h-3 text-amber-500" />
+                              <span className={isPast(resubmitDeadline) ? 'text-red-600' : 'text-amber-600'}>
+                                {format(resubmitDeadline, 'MMM d, h:mm a')}
+                              </span>
+                            </div>
+                          ) : (
+                            '-'
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <Button 
                           size="sm" 

@@ -131,7 +131,11 @@ export function RankingLeaderboard() {
     calculatedPosition: index + 1,
   }))
   
-  const bottom20Threshold = Math.ceil(rankedWithPositions.length * 0.8)
+  // Bottom 20% flagging logic: floor(totalSeries * 0.20), minimum 1
+  // With 5 series: floor(5 * 0.20) = 1 series flagged (only rank #5)
+  const totalSeries = rankedWithPositions.length
+  const flaggedCount = Math.max(1, Math.floor(totalSeries * 0.20))
+  const bottom20Threshold = totalSeries - flaggedCount // Series at positions > threshold are at risk
   const atRiskSeries = rankedWithPositions.filter((_, index) => index + 1 > bottom20Threshold)
   
   // Auto-trigger decision sessions for Bottom 20% series

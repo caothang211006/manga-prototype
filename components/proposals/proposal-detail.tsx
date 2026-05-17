@@ -66,6 +66,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   })
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showVoteDialog, setShowVoteDialog] = useState(false)
+  const [showVoteConfirmDialog, setShowVoteConfirmDialog] = useState(false) // Issue 5: Vote confirmation
   const [voteValue, setVoteValue] = useState<'approve' | 'reject' | 'defer' | ''>('')
   const [voteComment, setVoteComment] = useState('')
   const [rejectReasonError, setRejectReasonError] = useState<string | null>(null)
@@ -291,7 +292,8 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
     setShowSubmitDialog(false)
   }
 
-  const handleVote = () => {
+  // Issue 5: Validate vote and show confirmation dialog
+  const handleVoteValidation = () => {
     if (!voteValue) return
     
     // BR-VOT-02: Validate reason is required for reject
@@ -299,6 +301,14 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       setRejectReasonError('Reason is required (BR-VOT-02)')
       return
     }
+    
+    // Show confirmation dialog
+    setShowVoteConfirmDialog(true)
+  }
+
+  // Issue 5: Confirm and submit the vote
+  const handleVoteConfirm = () => {
+    if (!voteValue) return
     
     const vote: Vote = {
       id: `vote-${Date.now()}`,
@@ -385,6 +395,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       })
     }
     
+    setShowVoteConfirmDialog(false)
     setShowVoteDialog(false)
     setVoteValue('')
     setVoteComment('')
@@ -476,7 +487,10 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Board Member Restricted View: Only show voting interface during active window, result after */}
-          {isBoard && !isMangaka && (
+          {/* Fix: Check CURRENT ACTIVE ROLE (isBoard), not user type (isBoardMember flag) */}
+          {/* If current role = Editor → show full proposal detail */}
+          {/* If current role = Board Member → show voting interface only, no proposal content */}
+          {isBoard && (
             <>
               {/* If voting closed, Board Members only see result, not proposal content */}
               {!isVotingWindowActive && proposal.status !== 'voting' && (
@@ -514,8 +528,9 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
             </>
           )}
           
-          {/* Full Proposal Details - Hidden from Board Members */}
-          {(!isBoard || isMangaka) && (
+          {/* Full Proposal Details - Hidden from Board Members (role=board only) */}
+          {/* Editors (including dual-role users like Hiroshi when in Editor role) see full details */}
+          {!isBoard && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -695,8 +710,9 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
           )}
         </div>
 
-        {/* Sidebar - Hidden from Board Members (they cannot see mangaka info) */}
-        {(!isBoard || isMangaka) && (
+        {/* Sidebar - Hidden from Board Members role (they cannot see mangaka info) */}
+        {/* Editors (including dual-role users) see full sidebar */}
+        {!isBoard && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
@@ -866,8 +882,8 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
                 <div className="flex items-center gap-2 text-red-500 text-sm">
                   <AlertTriangle className="w-4 h-4" />
                   {rejectReasonError}
-                </div>
-              )}
+              </div>
+            )}
             </div>
           </div>
           <DialogFooter>
@@ -875,10 +891,36 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
               Cancel
             </Button>
             <Button 
-              onClick={handleVote} 
+              onClick={handleVoteValidation} 
               disabled={!voteValue || (voteValue === 'reject' && !voteComment.trim())}
             >
               Submit Vote
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Vote Confirmation Dialog - Issue 5: BR-VOT-01 */}
+      <Dialog open={showVoteConfirmDialog} onOpenChange={setShowVoteConfirmDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Your Vote</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to vote <strong className="capitalize">{voteValue}</strong> for this proposal?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-amber-600 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" />
+              This action cannot be undone (BR-VOT-01)
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVoteConfirmDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleVoteConfirm}>
+              Confirm
             </Button>
           </DialogFooter>
         </DialogContent>

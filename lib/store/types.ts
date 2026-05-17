@@ -7,6 +7,7 @@ export interface User {
   role: UserRole
   avatar?: string
   isBoardMember?: boolean // For dual role users (e.g., Editor + Board Member)
+  conflictSeries?: string[] // Series IDs where this user has conflict of interest (e.g., Tantou Editor)
 }
 
 // Proposal

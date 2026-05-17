@@ -98,7 +98,10 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
   const isBoardMember = state.currentUser.role === 'board' || state.currentUser.isBoardMember
   
   // Check if current user is Tantou Editor of this series (conflict of interest)
+  // BR-DEC-02: Check both by editorId AND by conflictSeries array
   const isTantouEditor = series?.editorId === state.currentUser.id
+  const hasConflictOfInterest = isTantouEditor || 
+    (state.currentUser.conflictSeries?.includes(session.seriesId) ?? false)
   
   // Check if current user has already voted
   const hasVoted = session.votes.some(v => v.boardMemberId === state.currentUser.id)
@@ -368,7 +371,7 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
       </Card>
       
       {/* Conflict of Interest Warning - BR-DEC-02 */}
-      {isTantouEditor && (
+      {hasConflictOfInterest && (
         <Card className="border-amber-500 bg-amber-500/10">
           <CardContent className="flex items-center gap-3 py-4">
             <AlertTriangle className="h-5 w-5 text-amber-600" />
@@ -401,7 +404,7 @@ export function DecisionSession({ sessionId }: DecisionSessionProps) {
         {/* Vote Section (Left Column) */}
         <div className="md:col-span-2 space-y-6">
           {/* Voting Controls - Only show for Board Members who haven't voted and no conflict */}
-          {isBoardMember && !hasVoted && !isTantouEditor && session.status === 'open' && (
+          {isBoardMember && !hasVoted && !hasConflictOfInterest && session.status === 'open' && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
