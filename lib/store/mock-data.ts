@@ -25,6 +25,19 @@ const daysAgo = (days: number) => {
   return date
 }
 
+// Helper for minutes from now (for testing SLA - 48 minutes instead of 48 hours)
+const minutesFromNow = (minutes: number) => {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() + minutes)
+  return date
+}
+
+const minutesAgo = (minutes: number) => {
+  const date = new Date()
+  date.setMinutes(date.getMinutes() - minutes)
+  return date
+}
+
 // Users
 export const mockUsers: User[] = [
   { id: 'user-1', name: 'Yuki Tanaka', role: 'mangaka' },
@@ -86,6 +99,7 @@ export const mockSeries: Series[] = [
     editorId: 'user-4',
     rankingScore: 85,
     createdAt: daysAgo(365),
+    publicationDate: daysAgo(350), // First published 350 days ago
   },
   {
     id: 'series-2',
@@ -97,6 +111,7 @@ export const mockSeries: Series[] = [
     editorId: 'bm-d', // Board Member D is Tantou Editor - conflict of interest for decisions
     rankingScore: 15,
     createdAt: daysAgo(180),
+    publicationDate: daysAgo(165), // First published 165 days ago
   },
   {
     id: 'series-3',
@@ -108,6 +123,7 @@ export const mockSeries: Series[] = [
     editorId: 'user-4',
     rankingScore: 8,
     createdAt: daysAgo(400),
+    publicationDate: daysAgo(385), // First published 385 days ago
   },
   {
     id: 'series-4',
@@ -119,6 +135,7 @@ export const mockSeries: Series[] = [
     editorId: 'user-4',
     rankingScore: 72,
     createdAt: daysAgo(200),
+    publicationDate: daysAgo(185), // First published 185 days ago
   },
   {
     id: 'series-5',
@@ -130,6 +147,7 @@ export const mockSeries: Series[] = [
     editorId: 'user-4',
     rankingScore: 45,
     createdAt: daysAgo(150),
+    publicationDate: daysAgo(135), // First published 135 days ago
   },
   {
     id: 'series-6',
@@ -141,6 +159,7 @@ export const mockSeries: Series[] = [
     editorId: 'user-4',
     rankingScore: 18,
     createdAt: daysAgo(120),
+    publicationDate: daysAgo(105), // First published 105 days ago
   },
 ]
 
@@ -236,15 +255,17 @@ export const mockTasks: Task[] = [
 ]
 
 // Manuscripts
+// Testing mode: 48 minutes SLA (production: 48 hours)
+// Reminder sent at 36 minutes (12 minutes remaining)
 export const mockManuscripts: Manuscript[] = [
   {
     id: 'manuscript-1',
     chapterId: 'chapter-1',
     version: 2,
     fileUrl: '/manuscripts/dragons-destiny-ch7-v2.pdf',
-    submittedAt: daysAgo(0.25), // 6 hours ago
+    submittedAt: minutesAgo(18), // 18 minutes ago
     status: 'pending',
-    slaDeadline: daysFromNow(1.25), // 30h remaining
+    slaDeadline: minutesFromNow(30), // 30 minutes remaining (48-18=30)
     annotations: [],
     feedback: undefined,
   },
@@ -390,10 +411,10 @@ export const mockNotifications: Notification[] = [
     id: 'notif-2',
     userId: 'user-4',
     type: 'sla',
-    title: 'Manuscript Pending Review',
-    message: 'A manuscript has been waiting for review for 6 hours. 30h remaining on SLA.',
+    title: 'SLA Warning - Manuscript Pending Review',
+    message: 'A manuscript has been waiting for review. 12 minutes remaining on SLA (testing mode). Reminder sent at 36-minute mark.',
     read: false,
-    createdAt: daysAgo(0.25),
+    createdAt: minutesAgo(36), // Sent when 12 minutes remaining
     link: '/manuscripts',
   },
   // Notifications for Board Members about decision sessions

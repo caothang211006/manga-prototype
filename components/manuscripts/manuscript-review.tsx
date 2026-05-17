@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { SLATimer } from '@/components/ui/countdown-timer'
 import { 
@@ -15,7 +16,9 @@ import {
   Clock,
   FileText,
   MessageSquare,
-  History
+  History,
+  Plus,
+  AlertTriangle
 } from 'lucide-react'
 import { format, isPast, addDays } from 'date-fns'
 import {
@@ -27,6 +30,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Separator } from '@/components/ui/separator'
+import type { Annotation } from '@/lib/store/types'
 
 interface ManuscriptReviewProps {
   manuscriptId: string
@@ -44,6 +48,12 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
   const [showApproveDialog, setShowApproveDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [feedback, setFeedback] = useState('')
+  
+  // Annotation form state
+  const [showAnnotationForm, setShowAnnotationForm] = useState(false)
+  const [annotationPageNumber, setAnnotationPageNumber] = useState('')
+  const [annotationComment, setAnnotationComment] = useState('')
+  const [annotationError, setAnnotationError] = useState<string | null>(null)
 
   const isEditor = currentUser.role === 'editor'
   const canReview = isEditor && manuscript?.status === 'pending'
@@ -78,6 +88,53 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
     })
     setShowRejectDialog(false)
     setFeedback('')
+  }
+
+  // Handle adding annotation
+  const handleAddAnnotation = () => {
+    setAnnotationError(null)
+    
+    // BR-MAN-07: Page number is required
+    if (!annotationPageNumber.trim()) {
+      setAnnotationError('Page number is required (BR-MAN-07)')
+      return
+    }
+    
+    const pageNum = parseInt(annotationPageNumber, 10)
+    
+    // Validate page number is a positive integer
+    if (isNaN(pageNum) || pageNum <= 0) {
+      setAnnotationError('Page number must be a positive integer (BR-MAN-07)')
+      return
+    }
+    
+    // Validate comment is not empty
+    if (!annotationComment.trim()) {
+      setAnnotationError('Annotation comment is required')
+      return
+    }
+    
+    const newAnnotation: Annotation = {
+      id: `anno-${Date.now()}`,
+      pageNumber: pageNum,
+      x: 0,
+      y: 0,
+      comment: annotationComment.trim(),
+      createdAt: new Date()
+    }
+    
+    dispatch({
+      type: 'UPDATE_MANUSCRIPT',
+      payload: {
+        ...manuscript,
+        annotations: [...manuscript.annotations, newAnnotation]
+      }
+    })
+    
+    // Reset form
+    setAnnotationPageNumber('')
+    setAnnotationComment('')
+    setShowAnnotationForm(false)
   }
 
   if (!manuscript || !chapter || !series) {
@@ -257,14 +314,22 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
               {manuscript.status === 'pending' && (
                 <>
                   <Separator />
-                  <div className="p-3 rounded-lg bg-muted">
+                  <div className="p-3 rounded-lg bg-muted space-y-2">
                     <div className="flex items-center gap-2 mb-2">
                       <Clock className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm font-medium">SLA Deadline</span>
+                      <span className="text-sm font-medium">Review SLA</span>
                     </div>
-                    <p className={`text-sm ${isPast(manuscript.slaDeadline) ? 'text-red-600' : 'text-muted-foreground'}`}>
-                      {format(manuscript.slaDeadline, 'MMM d, yyyy h:mm a')}
+                    <p className="text-xs text-muted-foreground">
+                      Testing mode: 48 minutes (Production: 48 hours)
                     </p>
+                    <p className={`text-sm ${isPast(manuscript.slaDeadline) ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                      Deadline: {format(manuscript.slaDeadline, 'MMM d, yyyy h:mm a')}
+                    </p>
+                    {isPast(manuscript.slaDeadline) && (
+                      <p className="text-xs text-red-600 font-medium">
+                        SLA Breached (BR-MAN-05)
+                      </p>
+                    )}
                   </div>
                 </>
               )}
@@ -305,15 +370,80 @@ export function ManuscriptReview({ manuscriptId }: ManuscriptReviewProps) {
           )}
 
           {/* Annotations */}
-          {manuscript.annotations.length > 0 && (
+          {/* Always show annotations card for editors to add annotations */}
+          {(manuscript.annotations.length > 0 || isEditor) && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Annotations</CardTitle>
-                <CardDescription>
-                  {manuscript.annotations.length} annotation{manuscript.annotations.length !== 1 ? 's' : ''}
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Annotations</CardTitle>
+                    <CardDescription>
+                      {manuscript.annotations.length} annotation{manuscript.annotations.length !== 1 ? 's' : ''}
+                    </CardDescription>
+                  </div>
+                  {isEditor && !showAnnotationForm && (
+                    <Button size="sm" variant="outline" onClick={() => setShowAnnotationForm(true)}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {/* Add Annotation Form */}
+                {showAnnotationForm && (
+                  <div className="p-4 rounded-lg border bg-muted/50 space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="page-number">Page Number *</Label>
+                      <Input
+                        id="page-number"
+                        type="number"
+                        min="1"
+                        value={annotationPageNumber}
+                        onChange={(e) => {
+                          setAnnotationPageNumber(e.target.value)
+                          setAnnotationError(null)
+                        }}
+                        placeholder="Enter page number"
+                        className={annotationError?.includes('Page number') ? 'border-red-500' : ''}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="annotation-comment">Comment *</Label>
+                      <Textarea
+                        id="annotation-comment"
+                        value={annotationComment}
+                        onChange={(e) => {
+                          setAnnotationComment(e.target.value)
+                          setAnnotationError(null)
+                        }}
+                        placeholder="Enter annotation comment..."
+                        rows={3}
+                      />
+                    </div>
+                    {annotationError && (
+                      <div className="flex items-center gap-2 text-red-500 text-sm">
+                        <AlertTriangle className="h-4 w-4" />
+                        {annotationError}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => {
+                        setShowAnnotationForm(false)
+                        setAnnotationPageNumber('')
+                        setAnnotationComment('')
+                        setAnnotationError(null)
+                      }}>
+                        Cancel
+                      </Button>
+                      <Button size="sm" onClick={handleAddAnnotation}>
+                        Add Annotation
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Existing Annotations */}
                 <div className="space-y-3">
                   {manuscript.annotations.map((annotation) => (
                     <div key={annotation.id} className="p-3 rounded-lg bg-muted">

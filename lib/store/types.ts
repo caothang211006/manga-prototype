@@ -50,6 +50,7 @@ export interface Series {
   rankingScore: number
   coverImage?: string
   createdAt: Date
+  publicationDate: Date // First publication date of the series
 }
 
 // Chapter

@@ -45,6 +45,8 @@ interface AppContextType {
   getDecisionSessionBySeriesId: (seriesId: string) => typeof initialState.decisionSessions[0] | undefined
   getUnreadNotificationCount: () => number
   getUserNotifications: () => typeof initialState.notifications
+  // BR-RES-01: Get Tantou Editor with fewest active series
+  getNextTantouEditor: () => User | undefined
 }
 
 const AppContext = createContext<AppContextType | null>(null)
@@ -89,6 +91,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const getUserNotifications = () =>
     state.notifications.filter((n) => n.userId === state.currentUser.id)
 
+  // BR-RES-01: Get Tantou Editor with fewest active series
+  // If tied, assign the Editor with the smallest editorID
+  const getNextTantouEditor = (): User | undefined => {
+    // Get all editors
+    const editors = state.users.filter(u => u.role === 'editor')
+    
+    if (editors.length === 0) return undefined
+    
+    // Count active series for each editor
+    const editorCounts = editors.map(editor => {
+      const activeSeriesCount = state.series.filter(
+        s => s.editorId === editor.id && s.status === 'active'
+      ).length
+      return { editor, count: activeSeriesCount }
+    })
+    
+    // Sort by count (ascending), then by id (ascending) for tiebreak
+    editorCounts.sort((a, b) => {
+      if (a.count !== b.count) return a.count - b.count
+      return a.editor.id.localeCompare(b.editor.id)
+    })
+    
+    return editorCounts[0]?.editor
+  }
+
   return (
     <AppContext.Provider
       value={{
@@ -106,6 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getDecisionSessionBySeriesId,
         getUnreadNotificationCount,
         getUserNotifications,
+        getNextTantouEditor,
       }}
     >
       {children}

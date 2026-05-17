@@ -47,6 +47,7 @@ import {
   Gavel,
   Plus,
 } from 'lucide-react'
+import { format } from 'date-fns'
 
 // Correct formula per business rules: Ranking Score = (voteCount / readerCount) × 100%
 function calculateVoteRate(voteCount: number, readerCount: number): number {
@@ -391,6 +392,7 @@ export function RankingLeaderboard() {
                 <TableHead className="text-center">Trend</TableHead>
                 <TableHead className="text-right">Vote Rate (%)</TableHead>
                 <TableHead className="text-right">Total Votes</TableHead>
+                <TableHead className="text-center">Publication Date</TableHead>
                 <TableHead className="text-center">Reader Count</TableHead>
                 <TableHead className="w-24"></TableHead>
               </TableRow>
@@ -432,6 +434,12 @@ export function RankingLeaderboard() {
                     <TableCell className="text-right font-medium">
                       {item.voteCount.toLocaleString()}
                     </TableCell>
+                    <TableCell className="text-center text-sm text-muted-foreground">
+                      {item.series?.publicationDate 
+                        ? format(item.series.publicationDate, 'MMM dd, yyyy')
+                        : '-'
+                      }
+                    </TableCell>
                     <TableCell className="text-center">
                       <span className="font-medium">
                         {item.readerCount.toLocaleString()}
@@ -465,6 +473,57 @@ export function RankingLeaderboard() {
               })}
             </TableBody>
           </Table>
+        </CardContent>
+      </Card>
+      
+      {/* Tiebreak Rules Info */}
+      <Card className="border-dashed">
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-base">Tiebreak Rules</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            If 2 series have equal Vote Rate (e.g. both 80%), the one with higher Total Votes ranks higher.
+            If Total Votes are also equal, the one with earlier Publication Date ranks higher.
+          </p>
+          
+          {/* Example Table */}
+          <div className="rounded-lg border overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="w-16">Rank</TableHead>
+                  <TableHead>Series</TableHead>
+                  <TableHead className="text-right">Vote Rate</TableHead>
+                  <TableHead className="text-right">Total Votes</TableHead>
+                  <TableHead className="text-center">Publication Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                <TableRow>
+                  <TableCell className="font-medium">#1</TableCell>
+                  <TableCell className="text-muted-foreground">Series A</TableCell>
+                  <TableCell className="text-right">80%</TableCell>
+                  <TableCell className="text-right font-medium">15,000</TableCell>
+                  <TableCell className="text-center text-muted-foreground">Jan 15, 2024</TableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell className="font-medium">#2</TableCell>
+                  <TableCell className="text-muted-foreground">Series B</TableCell>
+                  <TableCell className="text-right">80%</TableCell>
+                  <TableCell className="text-right">12,000</TableCell>
+                  <TableCell className="text-center text-muted-foreground">Jan 10, 2024</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+          <p className="text-xs text-muted-foreground italic">
+            Example: Series A ranks higher than Series B because both have 80% vote rate, 
+            but Series A has more total votes (15,000 vs 12,000).
+          </p>
         </CardContent>
       </Card>
       

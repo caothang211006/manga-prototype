@@ -111,10 +111,13 @@ function getTimeLeft(deadline: Date) {
 }
 
 // Helper component for SLA countdowns
+// Testing mode: 48 minutes SLA, reminder at 36 minutes (12 minutes remaining)
 export function SLATimer({ deadline, className }: { deadline: Date; className?: string }) {
   const now = new Date()
+  const minutesRemaining = differenceInMinutes(deadline, now)
   const hoursRemaining = differenceInHours(deadline, now)
   const isOverdue = isPast(deadline)
+  const isWarning = !isOverdue && minutesRemaining <= 12 // 12 minutes remaining (at 36 minute mark in testing mode)
   
   return (
     <div className={cn(
@@ -124,15 +127,16 @@ export function SLATimer({ deadline, className }: { deadline: Date; className?: 
       <div className={cn(
         'px-2 py-1 rounded text-xs font-medium',
         isOverdue && 'bg-red-100 text-red-700',
-        !isOverdue && hoursRemaining <= 12 && 'bg-amber-100 text-amber-700',
-        !isOverdue && hoursRemaining > 12 && 'bg-emerald-100 text-emerald-700',
+        isWarning && !isOverdue && 'bg-amber-100 text-amber-700',
+        !isOverdue && !isWarning && minutesRemaining > 12 && 'bg-emerald-100 text-emerald-700',
       )}>
         {isOverdue ? (
-          'SLA Breached'
+          <span>SLA Breached (BR-MAN-05)</span>
         ) : (
           <>
             <CountdownTimer deadline={deadline} showLabel={false} variant="compact" />
             <span className="ml-1">remaining</span>
+            {isWarning && <span className="ml-1">(Warning)</span>}
           </>
         )}
       </div>

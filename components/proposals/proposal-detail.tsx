@@ -52,7 +52,7 @@ interface ProposalDetailProps {
 
 export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const { state, dispatch, navigate, getUserById } = useApp()
-  const { proposals, currentUser, series } = state
+  const { proposals, currentUser, series, users } = state
 
   const proposal = proposals.find(p => p.id === proposalId)
   const mangaka = proposal ? getUserById(proposal.mangakaId) : null
@@ -68,7 +68,6 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const [showVoteDialog, setShowVoteDialog] = useState(false)
   const [voteValue, setVoteValue] = useState<'approve' | 'reject' | 'defer' | ''>('')
   const [voteComment, setVoteComment] = useState('')
-  const [rejectReason, setRejectReason] = useState('')
   const [rejectReasonError, setRejectReasonError] = useState<string | null>(null)
 
   const isMangaka = currentUser.role === 'mangaka'
@@ -286,8 +285,8 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const handleVote = () => {
     if (!voteValue) return
     
-    // BR-VOT-02: Validate reject reason is required
-    if (voteValue === 'reject' && !rejectReason.trim()) {
+    // BR-VOT-02: Validate reason is required for reject
+    if (voteValue === 'reject' && !voteComment.trim()) {
       setRejectReasonError('Reason is required (BR-VOT-02)')
       return
     }
@@ -297,7 +296,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       proposalId: proposal.id,
       boardMemberId: currentUser.id,
       vote: voteValue,
-      comment: voteValue === 'reject' ? rejectReason.trim() : (voteComment || undefined),
+      comment: voteComment.trim() || undefined,
       votedAt: new Date()
     }
     
@@ -324,6 +323,41 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       if (approves > rejects) {
         // Clear majority for approval
         newStatus = 'approved'
+        
+        // BR-RES-01: Auto-assign Tantou Editor with fewest active series
+        // If tied, assign the Editor with the smallest editorID
+        const editors = users.filter(u => u.role === 'editor')
+        const editorCounts = editors.map(editor => {
+          const activeSeriesCount = series.filter(
+            s => s.editorId === editor.id && s.status === 'active'
+          ).length
+          return { editor, count: activeSeriesCount }
+        })
+        
+        // Sort by count (ascending), then by id (ascending) for tiebreak
+        editorCounts.sort((a, b) => {
+          if (a.count !== b.count) return a.count - b.count
+          return a.editor.id.localeCompare(b.editor.id)
+        })
+        
+        const assignedEditor = editorCounts[0]?.editor
+        
+        // Create new series with auto-assigned Tantou Editor
+        if (assignedEditor) {
+          const newSeries = {
+            id: `series-${Date.now()}`,
+            title: proposal.title,
+            genre: proposal.genre,
+            status: 'active' as const,
+            proposalId: proposal.id,
+            mangakaId: proposal.mangakaId,
+            editorId: assignedEditor.id,
+            rankingScore: 0,
+            createdAt: new Date(),
+            publicationDate: new Date(), // Starts publishing from now
+          }
+          dispatch({ type: 'ADD_SERIES', payload: newSeries })
+        }
       } else {
         // BR-RES-02: Tie (approves === rejects) OR more rejects → REJECTED
         // Mangaka may resubmit after 30 days
@@ -345,7 +379,6 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
     setShowVoteDialog(false)
     setVoteValue('')
     setVoteComment('')
-    setRejectReason('')
     setRejectReasonError(null)
   }
 
@@ -758,7 +791,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       <Dialog open={showVoteDialog} onOpenChange={(open) => {
         setShowVoteDialog(open)
         if (!open) {
-          setRejectReason('')
+          setVoteComment('')
           setRejectReasonError(null)
         }
       }}>
@@ -802,39 +835,30 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
               </Select>
             </div>
             
-            {/* BR-VOT-02: Required reject reason field */}
-            {voteValue === 'reject' && (
-              <div className="space-y-2">
-                <Label>Rejection Reason *</Label>
-                <Textarea
-                  value={rejectReason}
-                  onChange={(e) => {
-                    setRejectReason(e.target.value)
-                    if (e.target.value.trim()) {
-                      setRejectReasonError(null)
-                    }
-                  }}
-                  placeholder="Please provide a reason for rejecting this proposal (required)..."
-                  rows={3}
-                  className={rejectReasonError ? 'border-red-500' : ''}
-                />
-                {rejectReasonError && (
-                  <div className="flex items-center gap-2 text-red-500 text-sm">
-                    <AlertTriangle className="w-4 h-4" />
-                    {rejectReasonError}
-                  </div>
-                )}
-              </div>
-            )}
-            
+            {/* Single Comment/Reason field - Required for Reject, Optional otherwise */}
             <div className="space-y-2">
-              <Label>Comment (Optional)</Label>
+              <Label>Comment / Reason {voteValue === 'reject' ? '*' : '(Optional)'}</Label>
               <Textarea
                 value={voteComment}
-                onChange={(e) => setVoteComment(e.target.value)}
-                placeholder="Add a comment to explain your decision..."
+                onChange={(e) => {
+                  setVoteComment(e.target.value)
+                  if (e.target.value.trim()) {
+                    setRejectReasonError(null)
+                  }
+                }}
+                placeholder={voteValue === 'reject' 
+                  ? "Please provide a reason for rejecting this proposal (required)..." 
+                  : "Add a comment to explain your decision..."
+                }
                 rows={3}
+                className={rejectReasonError ? 'border-red-500' : ''}
               />
+              {rejectReasonError && (
+                <div className="flex items-center gap-2 text-red-500 text-sm">
+                  <AlertTriangle className="w-4 h-4" />
+                  {rejectReasonError}
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -843,7 +867,7 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
             </Button>
             <Button 
               onClick={handleVote} 
-              disabled={!voteValue || (voteValue === 'reject' && !rejectReason.trim())}
+              disabled={!voteValue || (voteValue === 'reject' && !voteComment.trim())}
             >
               Submit Vote
             </Button>
