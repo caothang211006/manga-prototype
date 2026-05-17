@@ -71,8 +71,14 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const [rejectReasonError, setRejectReasonError] = useState<string | null>(null)
 
   const isMangaka = currentUser.role === 'mangaka'
-  const isBoard = currentUser.role === 'board' || currentUser.isBoardMember
+  // Fix: Check CURRENT ACTIVE ROLE, not user type
+  // If current role = Editor → show full proposal detail
+  // If current role = Board Member → show voting interface only
+  const isBoard = currentUser.role === 'board'
   const isEditor = currentUser.role === 'editor'
+  
+  // For dual role users (like Hiroshi), the view depends on which role they selected
+  // isBoardMember flag is only for checking voting eligibility, not for view restriction
   
   const isOwner = proposal?.mangakaId === currentUser.id
   
@@ -101,11 +107,14 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
       : null
 
   // Check for conflict of interest
-  const isConflicted = isBoard && (
+  // Voting eligibility includes dual-role users with isBoardMember flag
+  const canVoteAsBoard = isBoard || currentUser.isBoardMember
+  
+  const isConflicted = canVoteAsBoard && (
     proposal?.mangakaId === currentUser.id ||
     series.some(s => s.proposalId === proposalId && s.editorId === currentUser.id)
   )
-  const hasVoted = isBoard && proposal?.votes.some(v => v.boardMemberId === currentUser.id)
+  const hasVoted = canVoteAsBoard && proposal?.votes.some(v => v.boardMemberId === currentUser.id)
   
   // BR-11: Check if all eligible board members have voted
   const eligibleBoardMembers = users.filter(u => u.role === 'board' && u.id !== proposal?.mangakaId)
@@ -114,7 +123,8 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   )
   
   // BR-11: Cannot vote if all members have already voted
-  const canVote = isBoard && proposal?.status === 'voting' && !hasVoted && !isConflicted && !allMembersVoted
+  // Voting eligibility is based on canVoteAsBoard (includes dual-role users)
+  const canVote = canVoteAsBoard && proposal?.status === 'voting' && !hasVoted && !isConflicted && !allMembersVoted
 
   // Handle new proposal creation
   if (proposalId === 'new') {

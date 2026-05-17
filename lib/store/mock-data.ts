@@ -50,9 +50,9 @@ export const mockUsers: User[] = [
   // Board Member C: active, no conflict of interest
   { id: 'bm-c', name: 'Board Member C', role: 'board' },
   // Board Member D: active, is Tantou Editor of Shadow Chronicles (series-2) - has conflict of interest
-  { id: 'bm-d', name: 'Board Member D', role: 'board' },
-  // Board Member E: active, has conflict of interest on Shadow Chronicles
-  { id: 'bm-e', name: 'Board Member E (Conflict - Shadow Chronicles)', role: 'board' },
+  { id: 'bm-d', name: 'Board Member D', role: 'board', conflictSeries: ['series-2'] },
+  // Board Member E: active, is ALSO Tantou Editor of Shadow Chronicles - has conflict of interest
+  { id: 'bm-e', name: 'Board Member E (Conflict - Shadow Chronicles)', role: 'board', conflictSeries: ['series-2'] },
 ]
 
 // Proposals
@@ -286,6 +286,9 @@ export const mockManuscripts: Manuscript[] = [
 ]
 
 // Rankings
+// Bottom 20% flagging: floor(totalSeries * 0.20), minimum 1
+// With 5 active series: floor(5 * 0.20) = 1 series flagged
+// Only rank #5 (Shadow Chronicles) should be flagged
 export const mockRankings: RankingEntry[] = [
   {
     id: 'rank-1',
@@ -329,7 +332,7 @@ export const mockRankings: RankingEntry[] = [
     score: 18,
     position: 4,
     trend: 'down',
-    flagged: true,
+    flagged: false, // NOT flagged - Spirit Hunter is rank #4, not in bottom 20%
   },
   {
     id: 'rank-5',
@@ -340,11 +343,12 @@ export const mockRankings: RankingEntry[] = [
     score: 15,
     position: 5,
     trend: 'down',
-    flagged: true,
+    flagged: true, // ONLY Shadow Chronicles (rank #5) is flagged as bottom 20%
   },
 ]
 
 // Decision Sessions
+// Only Shadow Chronicles (series-2) has an open decision session as it's in bottom 20%
 export const mockDecisionSessions: DecisionSession[] = [
   // Open session for Shadow Chronicles (series-2) - auto-triggered for Bottom 20%
   {
@@ -355,14 +359,6 @@ export const mockDecisionSessions: DecisionSession[] = [
       { id: 'dv-1', sessionId: 'decision-1', boardMemberId: 'user-5', decision: 'keep', votedAt: daysAgo(1) },
     ],
     createdAt: daysAgo(3),
-  },
-  // Open session for Spirit Hunter (series-6) - auto-triggered for Bottom 20%
-  {
-    id: 'decision-4',
-    seriesId: 'series-6',
-    status: 'open',
-    votes: [],
-    createdAt: daysAgo(1),
   },
   // Finalized decision - Cancelled (Lost Legends)
   {
