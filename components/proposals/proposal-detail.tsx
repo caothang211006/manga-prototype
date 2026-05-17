@@ -108,7 +108,6 @@ export function ProposalDetail({ proposalId }: ProposalDetailProps) {
   const hasVoted = isBoard && proposal?.votes.some(v => v.boardMemberId === currentUser.id)
   
   // BR-11: Check if all eligible board members have voted
-  const { users } = state
   const eligibleBoardMembers = users.filter(u => u.role === 'board' && u.id !== proposal?.mangakaId)
   const allMembersVoted = proposal && eligibleBoardMembers.every(
     member => proposal.votes.some(v => v.boardMemberId === member.id)
